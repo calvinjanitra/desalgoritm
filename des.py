@@ -1,5 +1,3 @@
-import binascii
-
 # Initial Permutation Table
 IP = [58, 50, 42, 34, 26, 18, 10, 2,
       60, 52, 44, 36, 28, 20, 12, 4,
@@ -66,86 +64,38 @@ S_BOXES = [
     [[13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7],
      [1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2],
      [7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8],
-     [2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]]
-]
+     [2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]]]
 
-# Permutation Function P
-P = [16, 7, 20, 21, 29, 12, 28, 17,
-     1, 15, 23, 26, 5, 18, 31, 10,
-     2, 8, 24, 14, 32, 27, 3, 9,
-     19, 13, 30, 6, 22, 11, 4, 25]
-
-# Left Shift table
-SHIFT = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1]
-
-# Permuted Choice 1 (PC-1)
-PC1 = [57, 49, 41, 33, 25, 17, 9,
-       1, 58, 50, 42, 34, 26, 18,
-       10, 2, 59, 51, 43, 35, 27,
-       19, 11, 3, 60, 52, 44, 36,
-       63, 55, 47, 39, 31, 23, 15,
-       7, 62, 54, 46, 38, 30, 22,
-       14, 6, 61, 53, 45, 37, 29,
-       21, 13, 5, 28, 20, 12, 4]
-
-# Permuted Choice 2 (PC-2)
-PC2 = [14, 17, 11, 24, 1, 5,
-       3, 28, 15, 6, 21, 10,
-       23, 19, 12, 4, 26, 8,
-       16, 7, 27, 20, 13, 2,
-       41, 52, 31, 37, 47, 55,
-       30, 40, 51, 45, 33, 48,
-       44, 49, 39, 56, 34, 53,
-       46, 42, 50, 36, 29, 32]
-
-
-# Convert hexadecimal to binary (64-bit block)
-def hex_to_bin(hex_string):
-    return bin(int(hex_string, 16))[2:].zfill(64)
-
-# Convert binary to hexadecimal (64-bit block)
-def bin_to_hex(bin_string):
-    return hex(int(bin_string, 2))[2:].zfill(16).upper()
-
-# Perform permutation on a given block using the specified table
+# Permutation function
 def permute(block, table):
-    return ''.join([block[i - 1] for i in table])
+    return ''.join(block[i-1] for i in table)
 
-# Perform XOR operation between two binary strings
-def xor(a, b):
-    return ''.join(['1' if a[i] != b[i] else '0' for i in range(len(a))])
+# XOR two binary strings
+def xor(bin1, bin2):
+    return ''.join('1' if b1 != b2 else '0' for b1, b2 in zip(bin1, bin2))
 
-# Left circular shift
-def left_shift(key, shifts):
-    return key[shifts:] + key[:shifts]
-
-# Generate 16 subkeys from the 64-bit original key
-def key_generator(key_64bit):
-    key_56bit = permute(key_64bit, PC1)
-    left_key = key_56bit[:28]
-    right_key = key_56bit[28:]
+# Feistel function (simplified for this example)
+def feistel(block, key):
+    expanded_block = permute(block, E)  # Expansion from 32 to 48 bits
+    xored_block = xor(expanded_block, key)
+    return xored_block[:32]  # Simplified, take only the first 32 bits
+# Key generation (simplified for this example)
+def key_generator(key):
     subkeys = []
-    for shift in SHIFT:
-        left_key = left_shift(left_key, shift)
-        right_key = left_shift(right_key, shift)
-        combined_key = left_key + right_key
-        subkey = permute(combined_key, PC2)
+    for i in range(16):
+        # Generate a 48-bit subkey by shifting and selecting bits from the main key
+        subkey = key[i:i+48]  # Slice the first 48 bits for now (simplified)
+        if len(subkey) < 48:  # Ensure subkey is always 48 bits
+            subkey = subkey.zfill(48)
         subkeys.append(subkey)
     return subkeys
 
-# The Feistel function
-def feistel(right, subkey):
-    expanded_right = permute(right, E)
-    xor_result = xor(expanded_right, subkey)
-    sbox_result = ""
-    for i in range(8):
-        row = int(xor_result[i * 6] + xor_result[i * 6 + 5], 2)
-        col = int(xor_result[i * 6 + 1:i * 6 + 5], 2)
-        sbox_result += bin(S_BOXES[i][row][col])[2:].zfill(4)
-    return permute(sbox_result, P)
+# Function to XOR two binary strings
+def xor_bin(bin1, bin2):
+    return ''.join('1' if b1 != b2 else '0' for b1, b2 in zip(bin1, bin2))
 
-# DES encryption function
-def des_encrypt(plain_text, key):
+# DES encryption function (with CBC mode)
+def des_encrypt_cbc(plain_text, key, iv):
     # Initial Permutation
     permuted_block = permute(plain_text, IP)
     # Split block into left and right halves
@@ -153,57 +103,81 @@ def des_encrypt(plain_text, key):
 
     # Generate 16 subkeys
     subkeys = key_generator(key)
+    
+    # CBC-specific: XOR with the IV for the first block
+    right = xor_bin(right, iv)
+
     # Perform 16 rounds of DES
     for i in range(16):
         new_right = xor(left, feistel(right, subkeys[i]))
         left = right
         right = new_right
+    
     # Combine left and right halves and apply Final Permutation
     combined = right + left
     cipher_text = permute(combined, FP)
+    
     return cipher_text
 
-# DES decryption function
-def des_decrypt(cipher_text, key):
+# DES decryption function (with CBC mode)
+def des_decrypt_cbc(cipher_text, key, iv):
     # Initial Permutation
     permuted_block = permute(cipher_text, IP)
     # Split block into left and right halves
     left, right = permuted_block[:32], permuted_block[32:]
+    
     # Generate 16 subkeys
     subkeys = key_generator(key)
+    
     # Perform 16 rounds of DES in reverse order
     for i in range(15, -1, -1):
         new_right = xor(left, feistel(right, subkeys[i]))
         left = right
         right = new_right
+
     # Combine left and right halves and apply Final Permutation
     combined = right + left
-    plain_text = permute(combined, FP)
-    return plain_text
+    decrypted_block = permute(combined, FP)
 
-# Main encryption and decryption process
-def des_process(data, key, mode="encrypt"):
+    # CBC-specific: XOR with the IV for the first block after decryption
+    decrypted_block = xor_bin(decrypted_block, iv)
+    
+    return decrypted_block
+
+# Conversion functions
+def hex_to_bin(hex_str):
+    return bin(int(hex_str, 16))[2:].zfill(len(hex_str) * 4)
+
+def bin_to_hex(bin_str):
+    return hex(int(bin_str, 2))[2:].upper()
+
+# Main encryption and decryption process (CBC mode)
+def des_process_cbc(data, key, iv, mode="encrypt"):
     # Convert hexadecimal key to binary (64-bit)
     key_bin = hex_to_bin(key)
+    iv_bin = hex_to_bin(iv)  # IV must be a 64-bit block as well
+
     if mode == "encrypt":
         # Convert plaintext to binary (64-bit)
         data_bin = hex_to_bin(data)
-        encrypted_bin = des_encrypt(data_bin, key_bin)
+        encrypted_bin = des_encrypt_cbc(data_bin, key_bin, iv_bin)
         return bin_to_hex(encrypted_bin)
+
     elif mode == "decrypt":
         # Convert ciphertext to binary (64-bit)
         data_bin = hex_to_bin(data)
-        decrypted_bin = des_decrypt(data_bin, key_bin)
+        decrypted_bin = des_decrypt_cbc(data_bin, key_bin, iv_bin)
         return bin_to_hex(decrypted_bin)
 
-# Example usage
-plain_text_hex = "0123456789ABCDEC"
+# Example usage of DES in CBC mode
+plain_text_hex = "0123456789ABCDEF"
 key_hex = "133457799BBCDFF1"
+iv_hex = "AABB09182736CCDD"  # Example IV (must be unique and random for each encryption)
 
 # Encrypt
-cipher_text = des_process(plain_text_hex, key_hex, mode="encrypt")
-print(f"Encrypted (Cipher Text): {cipher_text}")
+cipher_text = des_process_cbc(plain_text_hex, key_hex, iv_hex, mode="encrypt")
+print(f"Encrypted (Cipher Text in CBC mode): {cipher_text}")
 
 # Decrypt
-decrypted_text = des_process(cipher_text, key_hex, mode="decrypt")
-print(f"Decrypted (Plain Text): {decrypted_text}")
+decrypted_text = des_process_cbc(cipher_text, key_hex, iv_hex, mode="decrypt")
+print(f"Decrypted (Plain Text in CBC mode): {decrypted_text}")
